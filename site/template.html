@@ -21,14 +21,16 @@ tr.vm{cursor:pointer}.note{font-size:12.5px;color:var(--mut)}svg text{fill:var(-
 <h2>Savings vs throttling risk <span class="note">each dot is a policy, backtested on 3 rolling origins</span></h2>
 <div class="card"><svg id="pf" viewBox="0 0 640 300" width="100%"></svg>
 <p class="note">x: share of VMs whose throttled intervals exceed the SLO (0.5% of 5-min intervals). y: share of provisioned cores removed. Up and left is better. Teal = forecast policies, amber = baselines that size from a single history statistic.</p></div>
-<h2>Largest recommendations <span class="note">click a row for the forecast vs reality</span></h2>
+<h2>Real Azure trace <span class="note">vmtable (2.7M VMs) + one 3.75-hour readings shard</span></h2>
+<div class="card" id="real">Loading…</div>
+<h2>Largest recommendations (synthetic fleet) <span class="note">click a row for the forecast vs reality</span></h2>
 <div class="card"><table id="t"></table></div>
 </main>
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const D=JSON.parse(document.getElementById('data').textContent),$=id=>document.getElementById(id);
 const inr=x=>'₹'+Math.round(x).toLocaleString('en-IN');
-$('banner').textContent=D.synthetic?'Synthetic fleet shaped like the Azure VM trace. It demonstrates the method and the backtest, not Azure behaviour. Use scripts/ingest_azure.py for a real sample.':'Computed on a sample of the Azure Public Dataset V2.';
+$('banner').textContent=D.synthetic?'The forecasting backtest and the VM table below use a synthetic fleet shaped like the Azure trace. The "Real Azure trace" section is computed on the actual Azure Public Dataset V2.':'Computed on a sample of the Azure Public Dataset V2.';
 if(!D.synthetic)$('banner').style.background='var(--ac)';
 const chosen=D.pareto.find(p=>p.name==='forecast q=0.99 ceil=0.85');
 $('kp').innerHTML=[[D.vms,'VMs in sample, '+D.days+' days'],[(chosen.core_savings*100).toFixed(1)+'%','cores removed (q=0.99, 85% ceiling)'],[(chosen.viol*100).toFixed(1)+'%','VMs that would have breached SLO'],[inr(chosen.inr_saved_per_month),'₹/month saved at '+inr(D.inr_per_core_month)+' per core (placeholder)']].map(([a,l])=>`<div><b>${a}</b><span>${l}</span></div>`).join('');
@@ -42,6 +44,13 @@ function chart(r){const W=640,H=120,n=r.hist.length+r.actual.length,sx=i=>i/n*W,
  const line=(a,o,c,d)=>`<polyline fill="none" stroke="${c}" stroke-width="1.5" ${d?'stroke-dasharray="4 3"':''} points="${a.map((v,i)=>sx(o+i)+','+sy(v)).join(' ')}"/>`;
  const lim=100*r.rec/r.cores;
  return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${sy(lim)}" y2="${sy(lim)}" stroke="var(--warn)" stroke-dasharray="2 3"/><text x="4" y="${sy(lim)-3}">recommended size = ${lim.toFixed(0)}% of current</text><line x1="${sx(r.hist.length)}" x2="${sx(r.hist.length)}" y1="0" y2="${H}" stroke="var(--bd)"/>${line(r.hist,0,'var(--mut)')}${line(r.actual,r.hist.length,'var(--fg)')}${line(r.fc,r.hist.length,'var(--ac)',1)}</svg><div class="note">hourly peak CPU % of current size. Grey: history. Black: what actually happened. Dashed teal: forecast (q=0.99).</div>`;}
+fetch('azure_real.json').then(r=>r.json()).then(R=>{const F=R.fleet,M=R.micro_backtest,pc=x=>(x*100).toFixed(1)+'%';
+ const hs=F.hindsight.filter(x=>x.ceiling===0.85);
+ $('real').innerHTML=`<div class="kp">${[[F.vms.toLocaleString('en-IN'),'real VMs in vmtable'],[F.p95_quantiles.p50+'%','median VM p95 of max CPU'],[pc(F.share_p95_below['10']),'VMs whose p95 stays under 10%'],[pc(hs[0].core_savings),'cores removable, hindsight p95 sizing @85%']].map(([a,l])=>`<div><b>${a}</b><span>${l}</span></div>`).join('')}</div>
+ <table><tr><th>Sized to (hindsight, VMs living 1 day or more)</th><th>Cores removed</th><th>Core-hours removed</th><th>VMs downsized</th></tr>${hs.map(x=>`<tr><td>${x.sized_to} @ 85% ceiling</td><td>${pc(x.core_savings)}</td><td>${pc(x.core_hour_savings)}</td><td>${pc(x.share_vms_downsized)}</td></tr>`).join('')}</table>
+ <p class="note"><b>Hindsight</b> means each VM is sized from its own lifetime statistics, so these are upper bounds on what a forecaster could do, not a backtest. Sizing to the lifetime <i>max</i> removes only ~${pc(hs[1].core_savings)}; the p95 figure is what you give up occasional peaks to get.</p>
+ <table><tr><th>Short real backtest (${M.vms_sampled} VMs, history ${M.history_steps*5} min, test ${M.test_steps*5} min)</th><th>Cores removed</th><th>VMs throttled at least once</th></tr>${M.policies.map(x=>`<tr><td>size to ${x.policy} @85%</td><td>${pc(x.core_savings)}</td><td>${pc(x.vms_with_any_throttle)}</td></tr>`).join('')}</table>
+ <p class="note">Readings shards are <i>time</i> slices: one shard is 3.75 hours of all VMs, so a 14-day per-VM history needs ~100 shards (~85 GB), which I did not download. This window shows no daily cycle, so treat it as a sanity check of the throttling arithmetic: a ${M.history_steps*5}-minute history makes hist-max sizing look far cheaper (${pc(M.policies[0].core_savings)} saved) than lifetime data supports (${pc(hs[1].core_savings)}), which is exactly the failure a longer history prevents.</p>`;}).catch(()=>{$('real').textContent='Real-data results not available.';});
 let h='<tr><th>VM</th><th>Cores</th><th>Recommend</th><th class="hide-s">Peak seen in history %</th><th>Peak actually next 3d %</th></tr>';
 D.examples.forEach((r,i)=>{h+=`<tr class="vm" data-i="${i}"><td>${r.vmid}</td><td>${r.cores}</td><td>${r.rec}</td><td class="hide-s">${r.peak_hist.toFixed(0)}</td><td>${r.peak_future.toFixed(0)}</td></tr><tr id="d${i}" style="display:none"><td colspan="5">${chart(r)}</td></tr>`;});
 $('t').innerHTML=h;document.querySelectorAll('tr.vm').forEach(tr=>tr.onclick=()=>{const e=$('d'+tr.dataset.i);e.style.display=e.style.display==='none'?'':'none';});

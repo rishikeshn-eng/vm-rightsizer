@@ -4,8 +4,17 @@ Forecast each VM's CPU peak, recommend a smaller size, and backtest how often th
 
 **Live UI:** https://rishikeshn-eng.github.io/vm-rightsizer/ (savings-vs-risk frontier, per-VM forecast vs reality)
 
-> **Status: published numbers are from a synthetic fleet, not the Azure trace.**
-> The generator (`rightsize/synth.py`) produces 800 VMs x 14 days of 5-minute max-CPU readings with the qualitative shape reported for Azure (mostly over-provisioned, some daily cycles, some batch bursts, rare spikes). It demonstrates the method and the backtest. The Azure ingest path (`rightsize/ingest.py`) is tested on a tiny file in the Azure V2 layout, but I have not run it on the real trace, which is 156 GB.
+> **Status: the forecasting backtest is on a synthetic fleet; there is also a real-data section from the actual Azure trace.**
+> The synthetic generator (`rightsize/synth.py`) produces 800 VMs x 14 days of 5-minute max-CPU readings with the qualitative shape reported for Azure. The real section (`rightsize/azure_real.py`) uses the actual `vmtable` (all 2,695,548 VMs) plus one readings shard (3.75 hours). A multi-day real backtest would need ~100 readings shards (~85 GB), which I did not download.
+
+## Real Azure results
+
+From the real `vmtable` (lifetime max / avg / p95-of-max CPU per VM; VMs living at least a day for the savings rows):
+
+- Real fleets are less idle than my synthetic fleet assumed: median VM p95-of-max CPU is **48.5%**, 25% of VMs sit under 10%, 10% are above 96%.
+- **Hindsight** sizing (each VM sized from its own lifetime stats, 85% ceiling; an upper bound, not a backtest): sizing to lifetime **p95** removes **38.4%** of cores (36.1% of core-hours) and downsizes 61% of VMs; sizing to lifetime **max** removes only **4.4%**.
+- **Short real backtest** (1,743 sampled VMs; size from the first 110 min of the shard, replay the next 115 min; 85% ceiling): "history max" removes 35.0% of cores and 5.2% of VMs throttle at least once; "history p95" removes 40.4% and 7.5% throttle. With so little history, "history max" looks far cheaper than lifetime data supports (4.4%), which is the failure a longer history prevents. This window has no daily cycle, so it checks the throttling arithmetic rather than forecasting skill.
+- The real core buckets are 2/4/8/24/>24 (`>24` treated as 32); my synthetic ladder used 1/2/4/8/16/24.
 
 ## Method
 
@@ -42,11 +51,10 @@ python scripts/build_site.py
 ### On the real Azure trace
 
 ```bash
-BASE=https://azurepublicdatasetv2.blob.core.windows.net/azurepublicdatasetv2/azure_v2
-curl -O $BASE/vmtable.csv.gz
-curl -O $BASE/vm_cpu_readings-file-1-of-125.csv.gz        # add shards for more coverage
-python scripts/ingest_azure.py vmtable.csv.gz vm_cpu_readings-file-*.csv.gz --sample-mod 200 --days 14
-python -m rightsize.run --npz data/sample.npz
+R=https://github.com/Azure/AzurePublicDataset/releases/download/dataset-v2   # links: AzurePublicDatasetLinksV2.txt
+curl -LO $R/trace_data_vmtable_vmtable.csv.gz                                 # 437 MB
+curl -LO $R/trace_data_vm_cpu_readings_vm_cpu_readings-file-1-of-195.csv.gz   # 856 MB; shards are TIME slices
+python scripts/azure_real_report.py trace_data_vmtable_vmtable.csv.gz trace_data_vm_cpu_readings_vm_cpu_readings-file-1-of-195.csv.gz   # -> docs/azure_real.json, ~10 s
 ```
 
-`ingest.py` takes the stated sample `hash(vmid) % sample_mod == 0`, keeps VMs with >= 98% of the window's readings, and reports how many it kept. Check that report: if readings are sharded across files in a way I misread, coverage will be low and you'll see it. The URLs and column order come from the dataset's documentation as I know it; verify them against the dataset page before a long download.
+For a multi-day per-VM matrix, `scripts/ingest_azure.py` unions consecutive shards (14 days needs ~100) and feeds `python -m rightsize.run --npz`. That path is tested on a tiny file in the real layout, not on real multi-day data. (An earlier version of this README gave a wrong host, `-of-125` shard names, and assumed shards split by VM; all three are corrected here after checking the real files.)

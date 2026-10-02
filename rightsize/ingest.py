@@ -3,7 +3,10 @@
 Files (no headers), per https://github.com/Azure/AzurePublicDataset/blob/master/AzurePublicDatasetV2.md:
   vmtable.csv.gz:  vmid, subscriptionid, deploymentid, vmcreated, vmdeleted, maxcpu, avgcpu, p95maxcpu,
                    vmcategory, vmcorecountbucket, vmmemorybucket
-  vm_cpu_readings-file-N-of-125.csv.gz: timestamp(s), vmid, mincpu, maxcpu, avgcpu   (5-minute readings)
+  vm_cpu_readings-file-N-of-195.csv.gz: timestamp(s), vmid, mincpu, maxcpu, avgcpu   (5-minute readings)
+
+Verified on the real files: shards are TIME slices (shard 1 = timestamps 0..13200 s for ~241k VMs), so a multi-day
+per-VM matrix needs many consecutive shards (~100 for 14 days). `build_matrix` unions whatever shards you pass.
 """
 from __future__ import annotations
 

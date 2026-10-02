@@ -1,0 +1,137 @@
+{
+ "source": "Azure Public Dataset V2 (vmtable + readings shard 1 of 195)",
+ "fleet": {
+  "vms": 2695548,
+  "vms_min_life": 352591,
+  "by_cores": [
+   {
+    "cores": 2,
+    "vms": 1586588,
+    "mean_p95": 52.9,
+    "mean_avg": 18.3
+   },
+   {
+    "cores": 4,
+    "vms": 823893,
+    "mean_p95": 34.5,
+    "mean_avg": 12.2
+   },
+   {
+    "cores": 8,
+    "vms": 193643,
+    "mean_p95": 52.1,
+    "mean_avg": 10.8
+   },
+   {
+    "cores": 24,
+    "vms": 80501,
+    "mean_p95": 48.4,
+    "mean_avg": 7.9
+   },
+   {
+    "cores": 32,
+    "vms": 10923,
+    "mean_p95": 77.9,
+    "mean_avg": 22.1
+   }
+  ],
+  "by_category": [
+   {
+    "category": "Unknown",
+    "vms": 2457455,
+    "mean_p95": 48.2,
+    "mean_avg": 16.2
+   },
+   {
+    "category": "Delay-insensitive",
+    "vms": 159615,
+    "mean_p95": 36.9,
+    "mean_avg": 8.1
+   },
+   {
+    "category": "Interactive",
+    "vms": 78478,
+    "mean_p95": 35.7,
+    "mean_avg": 11.5
+   }
+  ],
+  "p95_quantiles": {
+   "p10": 0.4,
+   "p25": 10.0,
+   "p50": 48.5,
+   "p75": 82.4,
+   "p90": 96.5
+  },
+  "share_p95_below": {
+   "10": 0.24952922374225947,
+   "25": 0.36359730934118034,
+   "50": 0.5113082757198165
+  },
+  "hindsight": [
+   {
+    "sized_to": "lifetime p95 of max CPU",
+    "ceiling": 0.7,
+    "core_savings": 0.34968435797952246,
+    "core_hour_savings": 0.3282535082481298,
+    "share_vms_downsized": 0.5666366980439093
+   },
+   {
+    "sized_to": "lifetime p95 of max CPU",
+    "ceiling": 0.85,
+    "core_savings": 0.38380318683242864,
+    "core_hour_savings": 0.3607697658402075,
+    "share_vms_downsized": 0.6068873000161661
+   },
+   {
+    "sized_to": "lifetime p95 of max CPU",
+    "ceiling": 1.0,
+    "core_savings": 0.4100480144504143,
+    "core_hour_savings": 0.38739167169649324,
+    "share_vms_downsized": 0.636828506683381
+   },
+   {
+    "sized_to": "lifetime max CPU",
+    "ceiling": 0.7,
+    "core_savings": 0.03365527283451142,
+    "core_hour_savings": 0.016234338571120333,
+    "share_vms_downsized": 0.04855767730883658
+   },
+   {
+    "sized_to": "lifetime max CPU",
+    "ceiling": 0.85,
+    "core_savings": 0.04445437705628108,
+    "core_hour_savings": 0.02340714538707156,
+    "share_vms_downsized": 0.06609073969556795
+   },
+   {
+    "sized_to": "lifetime max CPU",
+    "ceiling": 1.0,
+    "core_savings": 0.05805324903925024,
+    "core_hour_savings": 0.03414410387471978,
+    "share_vms_downsized": 0.0866329543295206
+   }
+  ]
+ },
+ "micro_backtest": {
+  "vms_sampled": 1743,
+  "steps": 45,
+  "history_steps": 22,
+  "test_steps": 23,
+  "window_hours": 3.75,
+  "ceiling": 0.85,
+  "policies": [
+   {
+    "policy": "history max",
+    "core_savings": 0.3495004163197336,
+    "vms_with_any_throttle": 0.05220883534136546,
+    "mean_throttled_share": 0.003916286263064681
+   },
+   {
+    "policy": "history p95",
+    "core_savings": 0.40362198168193175,
+    "vms_with_any_throttle": 0.07515777395295467,
+    "mean_throttled_share": 0.0062860136196961755
+   }
+  ]
+ }
+}

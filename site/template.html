@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VM Rightsizing Advisor</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#6b6b66;--card:#fff;--bd:#e3e2dc;--ac:#2a6f6b;--warn:#c2410c;--a2:#8a6d1d}
+@media(prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecebe6;--mut:#9a9992;--card:#1f1f1c;--bd:#33332f;--ac:#6cc2bc;--warn:#fb923c;--a2:#e0b84a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 64px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}
+.sub{color:var(--mut);margin:0 0 16px}.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.banner{background:var(--warn);color:#fff;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:13.5px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}th{color:var(--mut)}
+tr.vm{cursor:pointer}.note{font-size:12.5px;color:var(--mut)}svg text{fill:var(--mut);font-size:11px}
+.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.kp b{display:block;font-size:20px}.kp span{color:var(--mut);font-size:12.5px}
+.ctl{font-size:13.5px;margin:6px 0 10px}select{font:inherit;padding:4px 6px;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px}
+@media(max-width:600px){.hide-s{display:none}}
+</style></head><body><main>
+<h1>VM Rightsizing Advisor</h1>
+<p class="sub">Forecast each VM's peak CPU, recommend a smaller size, then replay history to count how often that would have throttled.</p>
+<div class="banner" id="banner"></div>
+<div class="card"><div class="kp" id="kp"></div></div>
+<h2>Savings vs throttling risk <span class="note">each dot is a policy, backtested on 3 rolling origins</span></h2>
+<div class="card"><svg id="pf" viewBox="0 0 640 300" width="100%"></svg>
+<p class="note">x: share of VMs whose throttled intervals exceed the SLO (0.5% of 5-min intervals). y: share of provisioned cores removed. Up and left is better. Teal = forecast policies, amber = baselines that size from a single history statistic.</p></div>
+<h2>Largest recommendations <span class="note">click a row for the forecast vs reality</span></h2>
+<div class="card"><table id="t"></table></div>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent),$=id=>document.getElementById(id);
+const inr=x=>'₹'+Math.round(x).toLocaleString('en-IN');
+$('banner').textContent=D.synthetic?'Synthetic fleet shaped like the Azure VM trace. It demonstrates the method and the backtest, not Azure behaviour. Use scripts/ingest_azure.py for a real sample.':'Computed on a sample of the Azure Public Dataset V2.';
+if(!D.synthetic)$('banner').style.background='var(--ac)';
+const chosen=D.pareto.find(p=>p.name==='forecast q=0.99 ceil=0.85');
+$('kp').innerHTML=[[D.vms,'VMs in sample, '+D.days+' days'],[(chosen.core_savings*100).toFixed(1)+'%','cores removed (q=0.99, 85% ceiling)'],[(chosen.viol*100).toFixed(1)+'%','VMs that would have breached SLO'],[inr(chosen.inr_saved_per_month),'₹/month saved at '+inr(D.inr_per_core_month)+' per core (placeholder)']].map(([a,l])=>`<div><b>${a}</b><span>${l}</span></div>`).join('');
+(function(){const W=640,H=300,m={l:46,r:12,t:12,b:36},xs=D.pareto.map(p=>p.viol*100),ys=D.pareto.map(p=>p.core_savings*100);
+ const X=v=>m.l+v/Math.max(...xs,1)*(W-m.l-m.r)*0.95,Y=v=>H-m.b-v/Math.max(...ys,1)*(H-m.t-m.b)*0.95;let s='';
+ for(let g=0;g<=4;g++){const v=Math.max(...ys)*0.95*g/4;s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--bd)"/><text x="4" y="${Y(v)+4}">${v.toFixed(0)}%</text>`;}
+ for(let g=0;g<=4;g++){const v=Math.max(...xs)*0.95*g/4;s+=`<text x="${X(v)-8}" y="${H-14}">${v.toFixed(0)}%</text>`;}
+ for(const p of D.pareto){const c=p.kind==='baseline'?'var(--a2)':'var(--ac)';s+=`<circle cx="${X(p.viol*100)}" cy="${Y(p.core_savings*100)}" r="${p.kind==='baseline'?7:5}" fill="${c}"><title>${p.name}: ${(p.core_savings*100).toFixed(1)}% saved, ${(p.viol*100).toFixed(1)}% VMs breach</title></circle>`;}
+ $('pf').innerHTML=s;})();
+function chart(r){const W=640,H=120,n=r.hist.length+r.actual.length,sx=i=>i/n*W,sy=v=>H-v/100*H;
+ const line=(a,o,c,d)=>`<polyline fill="none" stroke="${c}" stroke-width="1.5" ${d?'stroke-dasharray="4 3"':''} points="${a.map((v,i)=>sx(o+i)+','+sy(v)).join(' ')}"/>`;
+ const lim=100*r.rec/r.cores;
+ return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="0" x2="${W}" y1="${sy(lim)}" y2="${sy(lim)}" stroke="var(--warn)" stroke-dasharray="2 3"/><text x="4" y="${sy(lim)-3}">recommended size = ${lim.toFixed(0)}% of current</text><line x1="${sx(r.hist.length)}" x2="${sx(r.hist.length)}" y1="0" y2="${H}" stroke="var(--bd)"/>${line(r.hist,0,'var(--mut)')}${line(r.actual,r.hist.length,'var(--fg)')}${line(r.fc,r.hist.length,'var(--ac)',1)}</svg><div class="note">hourly peak CPU % of current size. Grey: history. Black: what actually happened. Dashed teal: forecast (q=0.99).</div>`;}
+let h='<tr><th>VM</th><th>Cores</th><th>Recommend</th><th class="hide-s">Peak seen in history %</th><th>Peak actually next 3d %</th></tr>';
+D.examples.forEach((r,i)=>{h+=`<tr class="vm" data-i="${i}"><td>${r.vmid}</td><td>${r.cores}</td><td>${r.rec}</td><td class="hide-s">${r.peak_hist.toFixed(0)}</td><td>${r.peak_future.toFixed(0)}</td></tr><tr id="d${i}" style="display:none"><td colspan="5">${chart(r)}</td></tr>`;});
+$('t').innerHTML=h;document.querySelectorAll('tr.vm').forEach(tr=>tr.onclick=()=>{const e=$('d'+tr.dataset.i);e.style.display=e.style.display==='none'?'':'none';});
+</script></body></html>
